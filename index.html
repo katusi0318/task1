@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Splatoon: Turf War Lite</title>
+  <style>
+    :root {
+      --bg-color: #121212;
+      --card-bg: #1e1e1e;
+      --neon-green: #00ff66;
+      --neon-pink: #ff007f;
+      --text-color: #ffffff;
+    }
+
+    body {
+      font-family: 'Segoe UI', Roboto, sans-serif;
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      margin: 0;
+      padding: 15px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      touch-action: manipulation;
+    }
+
+    h1 {
+      color: var(--neon-green);
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      text-shadow: 0 0 10px var(--neon-green);
+      margin-bottom: 5px;
+      font-size: 26px;
+    }
+
+    .subtitle {
+      color: var(--neon-pink);
+      font-size: 14px;
+      margin-bottom: 15px;
+      font-weight: bold;
+    }
+
+    .card {
+      background-color: var(--card-bg);
+      border: 2px solid var(--neon-green);
+      border-radius: 12px;
+      padding: 15px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 0 15px rgba(0, 255, 102, 0.2);
+      margin-bottom: 15px;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    canvas {
+      background-color: #222;
+      border: 3px solid #444;
+      border-radius: 8px;
+      cursor: crosshair;
+      touch-action: none;
+      display: block;
+      margin: 0 auto;
+    }
+
+    button {
+      width: 100%;
+      background: linear-gradient(45deg, var(--neon-green), #00b349);
+      border: none;
+      color: #000;
+      padding: 12px;
+      font-size: 16px;
+      font-weight: bold;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: 0.2s;
+    }
+
+    button:hover {
+      opacity: 0.9;
+      transform: scale(1.02);
+    }
+
+    .btn-secondary {
+      background: #333;
+      color: #fff;
+      border: 1px solid var(--neon-green);
+    }
+
+    .btn-danger {
+      background: #ff4444;
+      color: #fff;
+    }
+
+    .status-box {
+      display: flex;
+      justify-content: space-around;
+      background: #111;
+      padding: 10px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    .status-item {
+      text-align: center;
+    }
+
+    .status-value {
+      font-size: 20px;
+      color: var(--neon-pink);
+      font-weight: bold;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 10px;
+      margin-top: 8px;
+      border-radius: 6px;
+      border: 1px solid var(--neon-green);
+      background: #111;
+      color: white;
+      box-sizing: border-box;
+      text-align: center;
+    }
+
+    ol {
+      padding-left: 20px;
+      text-align: left;
+    }
+
+    li {
+      margin-bottom: 6px;
+      color: #ddd;
+    }
+
+    #loading {
+      color: var(--neon-green);
+      font-size: 16px;
+      margin-bottom: 15px;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>SPLAT-TURF LITE</h1>
+  <div class="subtitle">〜 インクを塗ってナワバリを広げろ！ 〜</div>
+
+  <div id="loading">通信中...</div>
+
+  <!-- ログイン画面 -->
+  <div id="login-section" class="card" style="display: none;">
+    <h2>Googleログイン</h2>
+    <p>バトルに参加して塗り面積のスコアをクラウドに保存しよう！</p>
+    <button id="btn-login">Googleでログインして対戦</button>
+  </div>
+
+  <!-- メインゲーム画面 -->
+  <div id="game-section" class="card" style="display: none;">
+    <div id="user-display"></div>
+
+    <div class="status-box">
+      <div class="status-item">
+        <div>今回の塗り</div>
+        <div id="current-score" class="status-value">0 pt</div>
+      </div>
+      <div class="status-item">
+        <div>ハイスコア</div>
+        <div id="high-score" class="status-value">0 pt</div>
+      </div>
+    </div>
+
+    <p style="font-size: 12px; color: #aaa; margin: 5px 0;">キャンバスをドラッグ・スワイプしてインクを塗ろう！</p>
+    <canvas id="paintCanvas" width="350" height="300"></canvas>
+
+    <button id="btn-clear" class="btn-secondary">ステージをリセット（再挑戦）</button>
+
+    <h3>📝 プレイヤー名設定（加点要素）</h3>
+    <input type="text" id="player-name-input" placeholder="イカのなまえ">
+    <button id="btn-update-name" class="btn-secondary">名前を変更する</button>
+
+    <br><br>
+    <button id="btn-reset" class="btn-danger">全データを初期化</button>
+    <button id="btn-logout" class="btn-secondary">ログアウト</button>
+  </div>
+
+  <!-- ランキング画面 -->
+  <div id="ranking-section" class="card" style="display: none;">
+    <h3>🏆 全国イカ塗りランキング</h3>
+    <ol id="ranking-list"></ol>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { 
+      getAuth, 
+      signInWithRedirect, 
+      getRedirectResult, 
+      signOut, 
+      onAuthStateChanged,
+      GoogleAuthProvider 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+    import { 
+      getFirestore, 
+      doc, 
+      setDoc, 
+      getDoc, 
+      deleteDoc, 
+      collection, 
+      getDocs, 
+      query, 
+      orderBy, 
+      limit 
+    } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    // Firebase設定
+    const firebaseConfig = {
+      apiKey: "AIzaSyCgDD5KHeP9F8KUKJNw2MoqbgqboMbnXgU",
+      authDomain: "zisyu1.firebaseapp.com",
+      projectId: "zisyu1",
+      storageBucket: "zisyu1.firebasestorage.app",
+      messagingSenderId: "977101155156",
+      appId: "1:977101155156:web:edb2283bb33055090e76c1"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const provider = new GoogleAuthProvider();
+
+    let currentUser = null;
+    let playerData = { name: "", highScore: 0 };
+    let currentScore = 0;
+
+    // DOM要素
+    const loadingEl = document.getElementById("loading");
+    const loginSection = document.getElementById("login-section");
+    const gameSection = document.getElementById("game-section");
+    const rankingSection = document.getElementById("ranking-section");
+    const userDisplay = document.getElementById("user-display");
+    const currentScoreEl = document.getElementById("current-score");
+    const highScoreEl = document.getElementById("high-score");
+    const nameInput = document.getElementById("player-name-input");
+    const rankingList = document.getElementById("ranking-list");
+
+    // キャンバス設定
+    const canvas = document.getElementById("paintCanvas");
+    const ctx = canvas.getContext("2d");
+    let isDrawing = false;
+
+    // リダイレクト認証処理
+    getRedirectResult(auth).catch(err => console.error(err));
+
+    // イベントリスナー（認証）
+    document.getElementById("btn-login").addEventListener("click", () => signInWithRedirect(auth, provider));
+    document.getElementById("btn-logout").addEventListener("click", () => signOut(auth));
+
+    // 認証監視
+    onAuthStateChanged(auth, async (user) => {
+      loadingEl.style.display = "none";
+      if (user) {
+        currentUser = user;
+        loginSection.style.display = "none";
+        gameSection.style.display = "block";
+        rankingSection.style.display = "block";
+
+        await loadPlayerData(user.uid, user.displayName);
+        await loadRanking();
+        clearCanvas();
+      } else {
+        currentUser = null;
+        loginSection.style.display = "block";
+        gameSection.style.display = "none";
+        rankingSection.style.display = "none";
+      }
+    });
+
+    // データの読み込み
+    async function loadPlayerData(uid, defaultName) {
+      try {
+        const docRef = doc(db, "users", uid);
+        const docSnap = await getDoc(docRef);
+
+        if (docSnap.exists()) {
+          playerData = docSnap.data();
+        } else {
+          playerData = {
+            name: defaultName || "イカ選手",
+            highScore: 0
+          };
+          await setDoc(docRef, playerData);
+        }
+        updateUI();
+      } catch (e) {
+        console.error("Load Error:", e);
+      }
+    }
+
+    // データの保存
+    async function savePlayerData() {
+      if (!currentUser) return;
+      try {
+        const docRef = doc(db, "users", currentUser.uid);
+        await setDoc(docRef, playerData);
+        await loadRanking();
+      } catch (e) {
+        console.error("Save Error:", e);
+      }
+    }
+
+    // UIの表示更新
+    function updateUI() {
+      userDisplay.innerHTML = `<p>プレイヤー: <strong>${playerData.name}</strong></p>`;
+      highScoreEl.textContent = `${playerData.highScore} pt`;
+      currentScoreEl.textContent = `${currentScore} pt`;
+      nameInput.value = playerData.name;
+    }
+
+    // キャンバス描画（スプラトゥーン風塗り）
+    function startDrawing(e) {
+      isDrawing = true;
+      paint(e);
+    }
+
+    function stopDrawing() {
+      if (isDrawing) {
+        isDrawing = false;
+        ctx.beginPath();
+        checkScore();
+      }
+    }
+
+    function paint(e) {
+      if (!isDrawing) return;
+      e.preventDefault();
+
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX || (e.touches && e.touches[0].clientX)) - rect.left;
+      const y = (e.clientY || (e.touches && e.touches[0].clientY)) - rect.top;
+
+      ctx.lineWidth = 24;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = "#00ff66"; // スプラグリーン
+
+      ctx.lineTo(x, y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+
+      // 飛沫（スプラッシュ効果）
+      for (let i = 0; i < 3; i++) {
+        const dropX = x + (Math.random() - 0.5) * 35;
+        const dropY = y + (Math.random() - 0.5) * 35;
+        const dropRadius = Math.random() * 6 + 2;
+        ctx.fillStyle = "#00ff66";
+        ctx.beginPath();
+        ctx.arc(dropX, dropY, dropRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      currentScore += 15;
+      currentScoreEl.textContent = `${currentScore} pt`;
+    }
+
+    // スコア確認とハイスコア自動保存
+    async function checkScore() {
+      if (currentScore > playerData.highScore) {
+        playerData.highScore = currentScore;
+        updateUI();
+        await savePlayerData();
+      }
+    }
+
+    // キャンバスクリア
+    function clearCanvas() {
+      ctx.fillStyle = "#222222";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      currentScore = 0;
+      currentScoreEl.textContent = "0 pt";
+    }
+
+    // イベントバインド（マウス・タッチ）
+    canvas.addEventListener("mousedown", startDrawing);
+    canvas.addEventListener("mouseup", stopDrawing);
+    canvas.addEventListener("mousemove", paint);
+    canvas.addEventListener("mouseleave", stopDrawing);
+
+    canvas.addEventListener("touchstart", startDrawing, { passive: false });
+    canvas.addEventListener("touchend", stopDrawing);
+    canvas.addEventListener("touchmove", paint, { passive: false });
+
+    document.getElementById("btn-clear").addEventListener("click", clearCanvas);
+
+    // 名前更新
+    document.getElementById("btn-update-name").addEventListener("click", async () => {
+      const newName = nameInput.value.trim();
+      if (newName) {
+        playerData.name = newName;
+        updateUI();
+        await savePlayerData();
+        alert("名前を変更しました！");
+      }
+    });
+
+    // データリセット
+    document.getElementById("btn-reset").addEventListener("click", async () => {
+      if (confirm("本当にデータを初期化しますか？")) {
+        const docRef = doc(db, "users", currentUser.uid);
+        await deleteDoc(docRef);
+        playerData = { name: currentUser.displayName || "イカ選手", highScore: 0 };
+        clearCanvas();
+        await savePlayerData();
+        alert("データをリセットしました。");
+      }
+    });
+
+    // ランキング取得
+    async function loadRanking() {
+      rankingList.innerHTML = "";
+      try {
+        const q = query(collection(db, "users"), orderBy("highScore", "desc"), limit(5));
+        const querySnapshot = await getDocs(q);
+
+        querySnapshot.forEach((doc) => {
+          const data = doc.data();
+          const li = document.createElement("li");
+          li.textContent = `${data.name || "名無しのイカ"}: ${data.highScore || 0} pt`;
+          rankingList.appendChild(li);
+        });
+      } catch (e) {
+        console.error("Ranking Error:", e);
+      }
+    }
+  </script>
+</body>
+</html>
